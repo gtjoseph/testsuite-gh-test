@@ -1,0 +1,41 @@
+name: PRReCheck
+run-name: "PR ${{ github.event.number }} Recheck"
+on:
+  pull_request_target:
+    types: [ labeled ]
+
+concurrency:
+  group: check-${{ github.event.number }}
+  cancel-in-progress: true
+
+env:
+  PR_NUMBER: ${{ github.event.number }}
+
+jobs:
+  Setup:
+    if: ${{ github.event.label.name == vars.RECHECKPR_LABEL }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set Label
+        id: setlabel
+        env:
+          GH_TOKEN:  ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr edit --repo ${{ github.repository }} \
+            --remove-label ${{ vars.RECHECKPR_LABEL }} \
+            --remove-label ${{ vars.PR_SUBMIT_TESTS_PASSED }} \
+            --remove-label  ${{ vars.PR_SUBMIT_TESTS_FAILED }} \
+            --add-label ${{ vars.PR_SUBMIT_TESTING_IN_PROGRESS }} \
+            $PR_NUMBER || :
+
+  Check:
+    name: Check
+    needs: Setup
+    uses: asterisk/asterisk-ci-actions/.github/workflows/RunTestsuiteUnitTest.yml@main
+    with:
+      pr_number:         ${{ github.event.number }}
+      base_branch:       ${{ github.event.pull_request.base.ref }}
+      unittest_command:  ${{ fromJSON(needs.Setup.outputs.vars).UNITTEST_COMMAND }}
+    secrets:
+      TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
